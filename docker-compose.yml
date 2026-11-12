@@ -1,0 +1,70 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: wagering
+      POSTGRES_USER: wager
+      POSTGRES_PASSWORD: wager
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wager -d wagering"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  localstack:
+    image: localstack/localstack:4
+    environment:
+      SERVICES: sqs
+      AWS_DEFAULT_REGION: us-east-1
+    ports:
+      - "4566:4566"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  localstack-init:
+    image: localstack/localstack:4
+    depends_on:
+      localstack:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "/scripts/init-localstack.sh"]
+    volumes:
+      - ./scripts:/scripts:ro
+    environment:
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+
+  app:
+    image: oven/bun:1
+    working_dir: /app
+    command: sh -c "bun install && bun run start"
+    volumes:
+      - .:/app
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      DATABASE_URL: postgres://wager:wager@postgres:5432/wagering
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      SQS_ENDPOINT: http://localstack:4566
+      SQS_QUEUE_URL: http://localstack:4566/000000000000/wager-transactions.fifo
+      SQS_DLQ_URL: http://localstack:4566/000000000000/wager-transactions-dlq.fifo
+      OUTBOX_QUEUE_URL: http://localstack:4566/000000000000/wager-events.fifo
+      SQS_ENABLED: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      localstack-init:
+        condition: service_completed_successfully
+
+volumes:
+  postgres-data:
