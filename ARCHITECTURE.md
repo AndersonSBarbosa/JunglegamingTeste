@@ -3,10 +3,58 @@
 ## Limites entre componentes
 
 - `src/domain` contém as regras de valores monetários exatos e das solicitações de apostas; não depende do NestJS nem de ORM.
-- `src/wagering` implementa os casos de uso de carteiras e apostas e os endpoints HTTP.
+- `src/controllers` reúne os controllers HTTP.
+- `src/services` reúne os casos de uso, métricas e workers de mensageria.
+- `src/dtos` contém os objetos usados para validar os contratos de entrada HTTP.
 - `src/database` mantém as migrations versionadas do PostgreSQL e a conexão com o TypeORM.
-- `src/messaging` contém o consumidor SQS e o publicador da transactional outbox.
 - HTTP e SQS chamam o mesmo caso de uso: `WageringService.process`.
+
+## Estrutura de pastas
+
+```text
+.
+├── src/
+│   ├── app/                 # Módulo NestJS e tratamento de erros
+│   ├── auth/                # Ponto de extensão para validar a identidade do provedor
+│   ├── controllers/
+│   │   ├── health.controller.ts
+│   │   └── wagering.controller.ts
+│   ├── database/
+│   │   ├── migrations/      # Alterações versionadas e reversíveis no schema
+│   │   ├── data-source.ts   # Configuração da conexão TypeORM/PostgreSQL
+│   │   ├── migrate.ts       # Aplicação das migrations
+│   │   ├── revert.ts        # Reversão da última migration
+│   │   └── database-lifecycle.ts # Encerramento da conexão ao desligar
+│   ├── domain/              # Money e regras/validação da entrada de apostas
+│   ├── dtos/
+│   │   └── wagering.dto.ts  # DTOs de criação de carteira e aposta
+│   ├── services/
+│   │   ├── metrics.service.ts
+│   │   ├── outbox.publisher.ts
+│   │   ├── sqs.service.ts
+│   │   └── wagering.service.ts
+│   └── main.ts              # Inicialização da aplicação NestJS
+├── test/
+│   ├── money.test.ts        # Testes unitários de valores e validações
+│   └── wagering.integration.test.ts # Testes concorrentes com PostgreSQL
+├── scripts/
+│   └── init-localstack.sh   # Criação das filas SQS locais e da DLQ
+├── .postman/
+│   └── resources.yaml       # Configuração de recursos do Postman
+├── postman/
+│   └── globals/
+│       └── workspace.globals.yaml # Variáveis globais do workspace Postman
+├── ARCHITECTURE.md          # Decisões e desenho da arquitetura
+├── README.md                # Requisitos, execução e uso da API
+├── docker-compose.yml       # Serviços locais: aplicação, PostgreSQL e LocalStack
+├── package.json             # Dependências e comandos do projeto
+├── bun.lock                 # Versões fixadas das dependências Bun
+├── tsconfig.json            # Configuração do TypeScript estrito
+├── .env.example             # Exemplo de variáveis de ambiente
+└── .gitattributes           # Regras de formatação de arquivos no Git
+```
+
+O fluxo normal começa em `main.ts`, que carrega o módulo NestJS em `app/`. Requisições HTTP são validadas com os DTOs em `dtos/` e encaminhadas pelos controllers em `controllers/`. Mensagens SQS são recebidas pelos serviços em `services/` e encaminhadas ao mesmo caso de uso de apostas. Os serviços aplicam as regras de `domain/` e persistem os resultados no PostgreSQL pela conexão e migrations de `database/`. Eventos para integração são publicados posteriormente pela Outbox. Os testes em `test/` cobrem as regras isoladas e os cenários que dependem do banco real.
 
 ## Correção financeira
 

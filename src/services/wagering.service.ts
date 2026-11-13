@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { DataSource, QueryRunner } from 'typeorm';
 import { DomainHttpError } from '../app/errors';
-import { MetricsService } from '../app/metrics.service';
+import { MetricsService } from './metrics.service';
 import { ProviderIdentityPort } from '../auth/provider-identity.port';
 import { Money } from '../domain/money';
 import {
@@ -61,21 +61,28 @@ export class WageringService implements OnModuleInit, OnModuleDestroy {
   private stopping = false;
   private retryLoop?: Promise<void>;
 
+  /** Recebe persistência, métricas e validação da identidade do provedor. */
   constructor(
     private readonly dataSource: DataSource,
     private readonly metrics: MetricsService,
     private readonly providerIdentity: ProviderIdentityPort,
   ) {}
 
+  /** Inicia o worker que reprocessa transações aguardando referência. */
   onModuleInit(): void {
     this.retryLoop = this.retryPendingReferences();
   }
 
+  /** Solicita a parada do worker de referências antes de encerrar o serviço. */
   async onModuleDestroy(): Promise<void> {
     this.stopping = true;
     await this.retryLoop;
   }
 
+  /**
+   * Processa uma aposta de forma idempotente e transacional, incluindo
+   * bloqueio da carteira, ledger, Inbox e eventos da Outbox.
+   */
   async process(
     input: WagerInput,
     idempotencyKey: string,
@@ -414,6 +421,7 @@ export class WageringService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /** Cria uma carteira e registra saldo inicial, OPENING e ledger atomicamente. */
   async createWallet(playerId: string, initial: Money): Promise<Record<string, unknown>> {
     const runner = this.dataSource.createQueryRunner();
     await runner.connect();
@@ -490,6 +498,7 @@ export class WageringService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /** Busca uma carteira e serializa seu saldo sem perda de precisão. */
   async getWallet(walletId: string): Promise<Record<string, unknown>> {
     const rows = await this.dataSource.query(
       `SELECT id, player_id, balance::text, currency, version::text
@@ -506,6 +515,7 @@ export class WageringService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
+  /** Busca uma transação e retorna seus dados persistidos. */
   async getTransaction(id: string): Promise<Record<string, unknown>> {
     const rows = await this.dataSource.query(
       `SELECT id, provider_id, external_transaction_id, wallet_id, player_id,
@@ -519,6 +529,7 @@ export class WageringService implements OnModuleInit, OnModuleDestroy {
     return rows[0];
   }
 
+  /** Localiza uma transação pelos identificadores do provedor. */
   async getProviderTransaction(providerId: string, externalId: string) {
     const rows = await this.dataSource.query(
       `SELECT id FROM wager_transactions
@@ -531,6 +542,7 @@ export class WageringService implements OnModuleInit, OnModuleDestroy {
     return this.getTransaction(rows[0].id);
   }
 
+  /** Retorna uma página do ledger com cursor opaco e limite validado. */
   async getLedger(walletId: string, cursor?: string, limit = 50) {
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
       throw new DomainHttpError('INVALID_LIMIT', HttpStatus.BAD_REQUEST);
@@ -579,6 +591,7 @@ export class WageringService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
+  /** Reconstrói o saldo pelo ledger e informa divergências com a carteira. */
   async reconcile(walletId: string) {
     const rows = await this.dataSource.query(
       `SELECT w.balance::text AS stored_balance, w.currency,
@@ -626,6 +639,7 @@ export class WageringService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
+  /** Calcula a diferença absoluta entre dois valores decimais exatos. */
   private absoluteDifference(left: string, right: string): string {
     const toCents = (amount: string) => {
       const negative = amount.startsWith('-');
@@ -638,6 +652,7 @@ export class WageringService implements OnModuleInit, OnModuleDestroy {
     return `${absolute / 100n}.${(absolute % 100n).toString().padStart(2, '0')}`;
   }
 
+  /** Determina se uma operação altera o saldo e em qual direção. */
   private movement(
     kind: string,
     reference: TransactionRow | undefined,
@@ -654,6 +669,7 @@ export class WageringService implements OnModuleInit, OnModuleDestroy {
     return undefined;
   }
 
+  /** Verifica estado, contexto, tipo e valor da transação referenciada. */
   private referenceFailure(
     input: WagerInput,
     reference: TransactionRow,
@@ -684,6 +700,7 @@ export class WageringService implements OnModuleInit, OnModuleDestroy {
     return undefined;
   }
 
+  /** Grava um evento versionado na Outbox dentro da transação atual. */
   private async enqueueEvent(
     runner: QueryRunner,
     aggregateId: string,
@@ -707,6 +724,7 @@ export class WageringService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
+  /** Marca como processada a mensagem Inbox da entrega SQS atual. */
   private async markInboxProcessed(
     runner: QueryRunner,
     options: ProcessOptions,
@@ -719,6 +737,7 @@ export class WageringService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
+  /** Busca uma transação pela chave idempotente na transação atual ou no banco. */
   private async findByIdempotencyKey(
     key: string,
     runner?: QueryRunner,
@@ -730,6 +749,7 @@ export class WageringService implements OnModuleInit, OnModuleDestroy {
     return (rows as TransactionRow[])[0];
   }
 
+  /** Compara o hash e recompõe a resposta original de uma solicitação repetida. */
   private replay(row: TransactionRow, payloadHash: string): ProcessResult {
     if (row.payload_hash.trim() !== payloadHash) {
       throw new DomainHttpError('IDEMPOTENCY_KEY_PAYLOAD_CONFLICT', HttpStatus.CONFLICT);
@@ -747,10 +767,12 @@ export class WageringService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
+  /** Incrementa a métrica de transações para o status informado. */
   private countStatus(status: string): void {
     this.metrics.increment('wager_transactions_total', { status });
   }
 
+  /** Registra o resultado com identificadores de correlação, sem dados financeiros. */
   private logResult(
     input: WagerInput,
     idempotencyKey: string,
@@ -768,16 +790,19 @@ export class WageringService implements OnModuleInit, OnModuleDestroy {
     }));
   }
 
+  /** Identifica uma violação de constraint de unicidade do PostgreSQL. */
   private isUniqueViolation(error: unknown): boolean {
     return typeof error === 'object' && error !== null && 'code' in error &&
       (error as { code?: string }).code === '23505';
   }
 
+  /** Identifica conflitos de lock ou serialização retornados pelo PostgreSQL. */
   private isLockConflict(error: unknown): boolean {
     return typeof error === 'object' && error !== null && 'code' in error &&
       ['40P01', '40001', '55P03'].includes((error as { code?: string }).code ?? '');
   }
 
+  /** Busca periodicamente referências pendentes e tenta concluir suas transações. */
   private async retryPendingReferences(): Promise<void> {
     while (!this.stopping) {
       try {

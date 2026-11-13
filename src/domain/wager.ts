@@ -16,6 +16,7 @@ export interface WagerInput {
   referenceExternalTransactionId?: string;
 }
 
+/** Ordena recursivamente as chaves para produzir JSON determinístico. */
 function sortObjectKeys(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sortObjectKeys);
   if (typeof value !== 'object' || value === null) return value;
@@ -26,6 +27,7 @@ function sortObjectKeys(value: unknown): unknown {
   );
 }
 
+/** Calcula o SHA-256 dos campos de negócio em uma representação canônica. */
 export function canonicalPayloadHash(input: WagerInput): string {
   const canonical = JSON.stringify(sortObjectKeys({
     externalTransactionId: input.externalTransactionId,
@@ -41,6 +43,7 @@ export function canonicalPayloadHash(input: WagerInput): string {
   return createHash('sha256').update(canonical).digest('hex');
 }
 
+/** Valida os campos da aposta e retorna seu valor como Money. */
 export function validateWagerInput(input: WagerInput): Money {
   for (const [field, value] of Object.entries({
     providerId: input.providerId,

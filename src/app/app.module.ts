@@ -5,19 +5,20 @@ import {
   NoopProviderIdentityAdapter,
   ProviderIdentityPort,
 } from '../auth/provider-identity.port';
-import { MetricsService } from './metrics.service';
 import { dataSource } from '../database/data-source';
-import { OutboxPublisher } from '../messaging/outbox.publisher';
-import { SqsConsumer } from '../messaging/sqs.service';
-import { WageringController } from '../wagering/wagering.controller';
-import { WageringService } from '../wagering/wagering.service';
-import { HealthController } from './health.controller';
+import { HealthController } from '../controllers/health.controller';
+import { WageringController } from '../controllers/wagering.controller';
+import { OutboxPublisher } from '../services/outbox.publisher';
+import { MetricsService } from '../services/metrics.service';
+import { SqsConsumer } from '../services/sqs.service';
+import { WageringService } from '../services/wagering.service';
 
 @Module({
   controllers: [WageringController, HealthController],
   providers: [
     {
       provide: DataSource,
+      // Abre a conexão e aplica migrations antes de disponibilizar os serviços.
       useFactory: async () => {
         if (!dataSource.isInitialized) {
           await dataSource.initialize();

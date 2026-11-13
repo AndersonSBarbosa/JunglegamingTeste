@@ -3,9 +3,9 @@ import { randomUUID } from 'node:crypto';
 import { dataSource } from '../src/database/data-source';
 import { Money } from '../src/domain/money';
 import { WagerInput } from '../src/domain/wager';
-import { MetricsService } from '../src/app/metrics.service';
+import { MetricsService } from '../src/services/metrics.service';
 import { NoopProviderIdentityAdapter } from '../src/auth/provider-identity.port';
-import { WageringService } from '../src/wagering/wagering.service';
+import { WageringService } from '../src/services/wagering.service';
 
 const integration = process.env.RUN_INTEGRATION_TESTS === '1';
 

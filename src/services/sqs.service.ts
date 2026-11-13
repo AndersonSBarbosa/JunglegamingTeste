@@ -12,9 +12,9 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { DataSource } from 'typeorm';
-import { MetricsService } from '../app/metrics.service';
+import { MetricsService } from './metrics.service';
 import { WagerInput } from '../domain/wager';
-import { WageringService } from '../wagering/wagering.service';
+import { WageringService } from './wagering.service';
 
 interface WagerMessage {
   messageId: string;
@@ -30,6 +30,7 @@ export class SqsConsumer implements OnModuleInit, OnModuleDestroy {
   private readonly queueUrl = process.env.SQS_QUEUE_URL ?? '';
   private readonly enabled = process.env.SQS_ENABLED !== 'false';
 
+  /** Configura o cliente SQS e recebe os serviços usados pelo consumidor. */
   constructor(
     private readonly wagering: WageringService,
     private readonly dataSource: DataSource,
@@ -45,16 +46,19 @@ export class SqsConsumer implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  /** Inicia a leitura da fila quando o consumidor está habilitado e configurado. */
   onModuleInit(): void {
     if (this.enabled && this.queueUrl) this.loop = this.poll();
   }
 
+  /** Para o loop de consumo e libera os recursos do cliente SQS. */
   async onModuleDestroy(): Promise<void> {
     this.stopping = true;
     await this.loop;
     this.client.destroy();
   }
 
+  /** Verifica se a fila SQS configurada pode ser consultada. */
   async isReachable(): Promise<boolean> {
     if (!this.enabled || !this.queueUrl) return true;
     try {
@@ -72,6 +76,7 @@ export class SqsConsumer implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /** Atualiza o gauge com a quantidade aproximada de mensagens na DLQ. */
   async updateDlqMetric(): Promise<void> {
     const dlqUrl = process.env.SQS_DLQ_URL;
     if (!dlqUrl) return;
@@ -92,6 +97,7 @@ export class SqsConsumer implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /** Recebe mensagens, processa cada uma e só então confirma sua remoção. */
   private async poll(): Promise<void> {
     while (!this.stopping) {
       try {
@@ -144,6 +150,7 @@ export class SqsConsumer implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /** Valida o envelope recebido e encaminha a transação ao caso de uso comum. */
   private async consume(body: string, messageId: string): Promise<void> {
     let message: WagerMessage;
     try {
@@ -162,6 +169,7 @@ export class SqsConsumer implements OnModuleInit, OnModuleDestroy {
     );
   }
 
+  /** Executa uma consulta simples para verificar a disponibilidade do PostgreSQL. */
   async isDatabaseReachable(): Promise<boolean> {
     try {
       await this.dataSource.query('SELECT 1');

@@ -6,11 +6,13 @@ export class MetricsService {
   private readonly observations = new Map<string, { count: number; sum: number }>();
   private readonly gauges = new Map<string, number>();
 
+  /** Incrementa um contador, opcionalmente identificado por labels. */
   increment(name: string, labels: Record<string, string> = {}): void {
     const key = this.key(name, labels);
     this.counters.set(key, (this.counters.get(key) ?? 0) + 1);
   }
 
+  /** Registra uma observação para calcular contagem e soma da métrica. */
   observe(name: string, value: number): void {
     const current = this.observations.get(name) ?? { count: 0, sum: 0 };
     current.count += 1;
@@ -18,10 +20,12 @@ export class MetricsService {
     this.observations.set(name, current);
   }
 
+  /** Atualiza o valor atual de uma métrica do tipo gauge. */
   setGauge(name: string, value: number): void {
     this.gauges.set(name, value);
   }
 
+  /** Serializa os contadores, observações e gauges para exposição HTTP. */
   render(): string {
     const lines: string[] = [];
     for (const [key, value] of this.counters) lines.push(`${key} ${value}`);
@@ -32,6 +36,7 @@ export class MetricsService {
     return `${lines.join('\n')}\n`;
   }
 
+  /** Monta o nome Prometheus da métrica com labels em ordem estável. */
   private key(name: string, labels: Record<string, string>): string {
     const entries = Object.entries(labels).sort(([a], [b]) => a.localeCompare(b));
     if (!entries.length) return name;

@@ -1,5 +1,6 @@
 import { dataSource } from './data-source';
 
+/** Abre a conexão, reverte a última migration e encerra a conexão. */
 async function revert(): Promise<void> {
   await dataSource.initialize();
   try {

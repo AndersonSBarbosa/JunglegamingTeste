@@ -3,6 +3,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 export class InitialSchema1710000000000 implements MigrationInterface {
   name = 'InitialSchema1710000000000';
 
+  /** Cria as tabelas, índices, constraints e trigger do schema inicial. */
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
       CREATE TABLE wallets (
@@ -105,6 +106,7 @@ export class InitialSchema1710000000000 implements MigrationInterface {
     `);
   }
 
+  /** Remove na ordem inversa os objetos criados pela migration. */
   async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
       DROP TABLE outbox_messages;

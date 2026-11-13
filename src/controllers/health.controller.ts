@@ -1,26 +1,30 @@
 import { Controller, Get, HttpStatus, Res } from '@nestjs/common';
-import { Response } from 'express';
-import { SqsConsumer } from '../messaging/sqs.service';
-import { MetricsService } from './metrics.service';
+import type { Response } from 'express';
+import { MetricsService } from '../services/metrics.service';
+import { SqsConsumer } from '../services/sqs.service';
 
 @Controller()
 export class HealthController {
+  /** Recebe os serviços necessários para verificar dependências e métricas. */
   constructor(
     private readonly sqs: SqsConsumer,
     private readonly metrics: MetricsService,
   ) {}
 
+  /** Indica que o processo está ativo, sem consultar dependências externas. */
   @Get('health/live')
   live() {
     return { status: 'ok' };
   }
 
+  /** Expõe as métricas coletadas pelo processo em formato texto Prometheus. */
   @Get('metrics')
   metricsText(@Res({ passthrough: true }) response: Response) {
     response.type('text/plain; version=0.0.4');
     return this.metrics.render();
   }
 
+  /** Verifica se o PostgreSQL e o SQS estão disponíveis para atender requisições. */
   @Get('health/ready')
   async ready(@Res({ passthrough: true }) response: Response) {
     const [database, queue] = await Promise.all([
@@ -31,5 +35,4 @@ export class HealthController {
     response.status(ready ? HttpStatus.OK : HttpStatus.SERVICE_UNAVAILABLE);
     return { status: ready ? 'ok' : 'unavailable', database, queue };
   }
-
 }

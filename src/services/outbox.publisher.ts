@@ -1,7 +1,7 @@
 import { SendMessageCommand, SQSClient } from '@aws-sdk/client-sqs';
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { DataSource } from 'typeorm';
-import { MetricsService } from '../app/metrics.service';
+import { MetricsService } from './metrics.service';
 
 interface OutboxRow {
   id: string;
@@ -24,21 +24,25 @@ export class OutboxPublisher implements OnModuleInit, OnModuleDestroy {
   private loop?: Promise<void>;
   private readonly queueUrl = process.env.OUTBOX_QUEUE_URL ?? '';
 
+  /** Recebe o acesso ao banco e as métricas usadas pelo publicador. */
   constructor(
     private readonly dataSource: DataSource,
     private readonly metrics: MetricsService,
   ) {}
 
+  /** Inicia a publicação contínua quando uma fila de eventos foi configurada. */
   onModuleInit(): void {
     if (this.queueUrl) this.loop = this.publishLoop();
   }
 
+  /** Para o worker e fecha o cliente SQS durante o desligamento. */
   async onModuleDestroy(): Promise<void> {
     this.stopping = true;
     await this.loop;
     this.client.destroy();
   }
 
+  /** Reserva eventos pendentes, publica-os e agenda retry em caso de falha. */
   private async publishLoop(): Promise<void> {
     while (!this.stopping) {
       try {
@@ -91,6 +95,7 @@ export class OutboxPublisher implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /** Reserva um lote de eventos por lock distribuído e aplica um lease. */
   private async claimBatch(): Promise<OutboxRow[]> {
     const runner = this.dataSource.createQueryRunner();
     await runner.connect();
